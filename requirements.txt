@@ -1,0 +1,5 @@
+mistralai>=2.0.0
+rich
+requests
+prompt_toolkit
+pytest
