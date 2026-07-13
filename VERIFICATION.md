@@ -108,6 +108,27 @@ A story is done when:
 - No unit tests — packaging/docs, not application logic.
 - *Manual smoke test:* on this machine, clone the repo fresh into a throwaway directory (`git clone https://github.com/badhan-kv/TerminalAIChat temp-clone`), follow only the README's setup steps from scratch, confirm `python chat.py` runs. Then delete the throwaway clone.
 
+### Story 14 — Ground the model in the real current date (bug fix)
+- Every request to Mistral (`send_message`, `get_tool_calls`, `stream_message`) is prepended with a `system` message stating the actual current date/time, so the model doesn't fall back on its stale training-data cutoff when reasoning about "today", "now", or how recent web-search results are.
+- The system message is generated fresh per-call (`mistral_client.current_date_system_message()`), not stored in the persisted `messages`/history list, so it doesn't pollute `/history`, `/resume`, or session transcripts.
+- *Manual smoke test:* ask "what's today's date?" with no search — confirm it matches the real date. Then ask a time-sensitive question that triggers auto-search (e.g. "what happened in the news today") and confirm the model's framing of "today"/recency lines up with the actual date rather than being off by several days.
+
+### Story 15 — Fix slash-command autocomplete: preselect first match, don't submit partial text
+- **Bug:** typing a partial slash command (e.g. `/mo`) and pressing Enter previously submitted the literal partial text as a chat message instead of completing/running the intended command, because nothing in the dropdown was preselected by default.
+- The first matching suggestion in the dropdown is now preselected automatically as completions are computed (`chat.preselect_first_completion`), without needing an explicit Down/Tab press.
+- Pressing Enter while a partial (non-exact) slash command is typed completes the preselected (or manually arrow-selected) suggestion into the input line — same behavior as Tab — rather than submitting it (`chat.handle_enter`).
+- Once the input line holds a complete, exact command (e.g. after that first Enter, or if typed out in full), a further Enter submits it normally, same as before this fix.
+- Non-slash text is unaffected — Enter always submits directly since no completion menu is open.
+- Unit tests cover `preselect_first_completion` and `handle_enter` in isolation (mocked buffer/complete_state) — the actual interactive rendering isn't unit-testable, per this project's usual REPL/TUI testing approach.
+- *Manual smoke test:* type `/mo`, confirm `/model` appears highlighted in the dropdown without pressing any arrow key, press Enter once — confirm it completes to `/model` in the input line (doesn't submit), press Enter again — confirm it now runs `/model`. Separately, type `/exit` in full and press Enter once — confirm it quits immediately (no double-Enter needed for an already-exact command). Also confirm typing a normal (non-slash) message and pressing Enter still sends immediately.
+
+### Story 16 — Automated setup script (`setup.ps1`)
+- Running `.\setup.ps1` from a freshly cloned repo installs Python dependencies (`pip install -r requirements.txt`) and adds a `mistralbot` function to the user's `$PROFILE`, pointing at that clone's `chat.py` (using `$PSScriptRoot`, so it's correct regardless of where the repo was cloned).
+- Idempotent: running it again detects the marker comment already in `$PROFILE` and skips re-adding the function instead of duplicating it.
+- README documents `setup.ps1` as the primary setup path, with manual `pip install` as a fallback for users who don't want it touching their profile.
+- No unit tests — shell script, not application logic; verified manually only.
+- *Manual smoke test:* in a fresh clone, run `.\setup.ps1`, confirm dependencies install and `$PROFILE` gains the `mistralbot` function; run it a second time and confirm no duplicate block is added; open a new PowerShell window and confirm `mistralbot` launches the app from any directory.
+
 ## Notes
 - Stories are ordered so each one is runnable/demoable on its own — no story depends on a later one.
 - Story 11 is written last since it documents behavior from Stories 1-10, but the `HELP.md` content should be updated incrementally as each earlier story lands, not written all at once at the end (already true in practice — see the Ctrl+C caveat and `--max-tokens` docs added ahead of schedule).

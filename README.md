@@ -2,6 +2,8 @@
 
 A free, terminal-based AI chat tool for PowerShell, powered by Mistral's free API tier, with optional live web-search grounding via Tavily.
 
+**Platform:** Windows / PowerShell only (uses `%LOCALAPPDATA%` for config storage and a PowerShell profile function for the `mistralbot` launch command).
+
 ## Features
 - Streaming, markdown-rendered replies in the terminal (via `rich`).
 - Automatic web-search grounding when the model decides it needs current info, plus a manual `/search <query>` override (via Tavily).
@@ -11,42 +13,58 @@ A free, terminal-based AI chat tool for PowerShell, powered by Mistral's free AP
 
 Run `/help` in-chat or `python chat.py --help` for the full command reference, or see `HELP.md`.
 
-## Setup (any machine)
-1. Install Python 3.
-2. Clone this repo and `cd` into it:
-   ```powershell
-   git clone https://github.com/badhan-kv/TerminalAIChat.git
-   cd TerminalAIChat
-   ```
-3. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-4. Get free API keys (no credit card required for either) — see `GETTING_API_KEYS.md`:
-   - Mistral API key from console.mistral.ai
-   - Tavily API key from tavily.com
-5. Run it:
-   ```powershell
-   python chat.py
-   ```
-   First run prompts for the two API keys and caches them under `%LOCALAPPDATA%\mistralBot\config.json` (Windows) so you won't be asked again. Use `/logout` in-chat to clear cached keys.
+## Prerequisites
+- **Python 3** (3.10+) — check with `python --version`. Get it from [python.org](https://www.python.org/downloads/) if missing.
+- **Git** — check with `git --version`. Get it from [git-scm.com](https://git-scm.com/downloads) if missing.
+- **PowerShell** — comes with Windows.
 
-## Quick launch from any directory (PowerShell)
-Add a `mistralbot` function to your PowerShell profile so you can just type `mistralbot` from anywhere instead of `cd`-ing into the project and running `python chat.py`:
+## 1. Get your free API keys
+Two keys are required, both free tier, neither requires a credit card:
 
+1. **Mistral API key**
+   - Go to [console.mistral.ai](https://console.mistral.ai) and sign up / sign in.
+   - Your account defaults to **Free mode** (rate-limited, no card needed).
+   - Go to **API Keys** in the console and generate a key. Copy it somewhere safe.
+2. **Tavily API key** (powers live web-search grounding)
+   - Go to [tavily.com](https://tavily.com) and sign up (email or Google/GitHub OAuth).
+   - Your dashboard shows an API key immediately (starts with `tvly-`). Copy it.
+   - Free tier: 1,000 search credits/month, recurring.
+
+See `GETTING_API_KEYS.md` for more detail and sourcing notes on these limits.
+
+You'll paste both keys in when you first run the app (step 3 below) — no need to set them as environment variables yourself.
+
+## 2. Clone and set up
 ```powershell
-notepad $PROFILE   # creates the file if it doesn't exist yet
+git clone https://github.com/badhan-kv/TerminalAIChat.git
+cd TerminalAIChat
+.\setup.ps1
 ```
+`setup.ps1` does two things:
+- Installs Python dependencies (`pip install -r requirements.txt`).
+- Adds a `mistralbot` function to your PowerShell profile (`$PROFILE`), pointing at this clone, so you can launch the app from any directory afterwards. Safe to re-run — it won't add a duplicate.
 
-Add this, replacing the path with wherever you cloned the repo on *this* machine:
+If you'd rather not touch your PowerShell profile, skip `setup.ps1` and just run `pip install -r requirements.txt` — you can still launch with `python chat.py` from inside the project folder.
 
+## 3. First run
+Open a **new** PowerShell window (so the profile change takes effect), then from anywhere:
 ```powershell
-function mistralbot {
-    python "C:\path\to\TerminalAIChat\chat.py" @args
-}
+mistralbot
 ```
+(or `python chat.py` if you skipped the profile setup, from inside the project folder).
 
-Save, open a new PowerShell window, and run `mistralbot` (or `mistralbot --max-tokens 2048`, etc.) from any directory.
+First run prompts for your Mistral and Tavily API keys (input hidden) and caches them under `%LOCALAPPDATA%\mistralBot\config.json`, so you won't be asked again on later runs. Use `/logout` in-chat to clear cached keys and re-enter them.
+
+## Everyday use
+```powershell
+mistralbot                       # start a chat
+mistralbot --model mistral-large-latest
+mistralbot --max-tokens 2048
+```
+Type `/help` in-chat for the full command list, or see `HELP.md`.
+
+## Setting up on another machine
+Repeat steps 1–3 above on the new machine — each machine keeps its own cached API keys and its own `mistralbot` profile function pointing at wherever you cloned the repo there.
 
 ## License
 MIT — see `LICENSE`.

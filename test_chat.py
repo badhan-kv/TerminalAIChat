@@ -112,3 +112,66 @@ def test_slash_command_completer_no_completions_once_args_typed():
     completions = list(completer.get_completions(Document("/model foo"), None))
 
     assert completions == []
+
+
+def test_preselect_first_completion_selects_index_zero_when_unset():
+    buffer = MagicMock()
+    buffer.complete_state.complete_index = None
+    buffer.complete_state.completions = ["/model", "/max-tokens"]
+
+    chat.preselect_first_completion(buffer)
+
+    assert buffer.complete_state.complete_index == 0
+
+
+def test_preselect_first_completion_leaves_explicit_selection_alone():
+    buffer = MagicMock()
+    buffer.complete_state.complete_index = 1
+    buffer.complete_state.completions = ["/model", "/max-tokens"]
+
+    chat.preselect_first_completion(buffer)
+
+    assert buffer.complete_state.complete_index == 1
+
+
+def test_preselect_first_completion_noop_when_no_completions_open():
+    buffer = MagicMock()
+    buffer.complete_state = None
+
+    chat.preselect_first_completion(buffer)  # must not raise
+
+    assert buffer.complete_state is None
+
+
+def test_handle_enter_completes_preselected_suggestion_for_partial_command():
+    buffer = MagicMock()
+    buffer.document.text = "/mo"
+    buffer.complete_state.completions = [MagicMock(text="/model")]
+    buffer.complete_state.complete_index = 0
+
+    chat.handle_enter(buffer, chat.SLASH_COMMANDS)
+
+    buffer.apply_completion.assert_called_once_with(buffer.complete_state.completions[0])
+    buffer.validate_and_handle.assert_not_called()
+
+
+def test_handle_enter_submits_when_text_is_already_an_exact_command():
+    buffer = MagicMock()
+    buffer.document.text = "/exit"
+    buffer.complete_state.completions = [MagicMock(text="/exit")]
+    buffer.complete_state.complete_index = 0
+
+    chat.handle_enter(buffer, chat.SLASH_COMMANDS)
+
+    buffer.validate_and_handle.assert_called_once()
+    buffer.apply_completion.assert_not_called()
+
+
+def test_handle_enter_submits_normally_for_non_slash_text():
+    buffer = MagicMock()
+    buffer.document.text = "hello there"
+    buffer.complete_state = None
+
+    chat.handle_enter(buffer, chat.SLASH_COMMANDS)
+
+    buffer.validate_and_handle.assert_called_once()

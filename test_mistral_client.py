@@ -1,6 +1,8 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import mistral_client
+
+FAKE_SYSTEM_MESSAGE = {"role": "system", "content": "The current date is a fake fixed date."}
 
 
 def _fake_client(reply_text: str) -> MagicMock:
@@ -20,7 +22,8 @@ def test_send_message_returns_reply_text():
     assert result == "Hello there!"
 
 
-def test_send_message_passes_model_and_full_history():
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_send_message_passes_model_and_full_history(mock_system_message):
     client = _fake_client("ok")
     messages = [
         {"role": "user", "content": "first"},
@@ -32,20 +35,37 @@ def test_send_message_passes_model_and_full_history():
 
     client.chat.complete.assert_called_once_with(
         model="mistral-large-latest",
-        messages=messages,
+        messages=[FAKE_SYSTEM_MESSAGE] + messages,
         max_tokens=mistral_client.DEFAULT_MAX_TOKENS,
     )
 
 
-def test_send_message_passes_custom_max_tokens():
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_send_message_passes_custom_max_tokens(mock_system_message):
     client = _fake_client("ok")
     messages = [{"role": "user", "content": "hi"}]
 
     mistral_client.send_message(client, "mistral-small-latest", messages, max_tokens=64)
 
     client.chat.complete.assert_called_once_with(
-        model="mistral-small-latest", messages=messages, max_tokens=64
+        model="mistral-small-latest", messages=[FAKE_SYSTEM_MESSAGE] + messages, max_tokens=64
     )
+
+
+def test_send_message_grounds_model_in_real_current_date():
+    """Regression test: the model must be told the real current date on every
+    call, not left to infer it from training data (which caused it to think
+    "today" was several days in the past).
+    """
+    client = _fake_client("ok")
+    messages = [{"role": "user", "content": "hi"}]
+
+    mistral_client.send_message(client, "mistral-small-latest", messages)
+
+    sent_messages = client.chat.complete.call_args.kwargs["messages"]
+    assert sent_messages[0]["role"] == "system"
+    assert "current date" in sent_messages[0]["content"].lower()
+    assert sent_messages[1:] == messages
 
 
 def _fake_tool_call(call_id="call_1", name="web_search", arguments='{"query": "latest news"}'):
@@ -56,7 +76,8 @@ def _fake_tool_call(call_id="call_1", name="web_search", arguments='{"query": "l
     return tc
 
 
-def test_get_tool_calls_returns_message_with_tool_calls():
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_get_tool_calls_returns_message_with_tool_calls(mock_system_message):
     client = MagicMock()
     response = MagicMock()
     tool_call = _fake_tool_call()
@@ -69,7 +90,7 @@ def test_get_tool_calls_returns_message_with_tool_calls():
     assert message.tool_calls == [tool_call]
     client.chat.complete.assert_called_once_with(
         model="mistral-small-latest",
-        messages=messages,
+        messages=[FAKE_SYSTEM_MESSAGE] + messages,
         max_tokens=mistral_client.DEFAULT_MAX_TOKENS,
         tools=[mistral_client.WEB_SEARCH_TOOL],
         tool_choice="auto",
@@ -141,12 +162,22 @@ def test_stream_message_skips_events_with_no_choices():
     assert result == ["chunk"]
 
 
-def test_stream_message_passes_model_max_tokens_and_history():
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_stream_message_passes_model_max_tokens_and_history(mock_system_message):
     client = _fake_streaming_client([_fake_event("hi")])
     messages = [{"role": "user", "content": "hi"}]
 
     list(mistral_client.stream_message(client, "mistral-large-latest", messages, max_tokens=64))
 
     client.chat.stream.assert_called_once_with(
-        model="mistral-large-latest", messages=messages, max_tokens=64
+        model="mistral-large-latest", messages=[FAKE_SYSTEM_MESSAGE] + messages, max_tokens=64
     )
+
+
+def test_current_date_system_message_contains_todays_date():
+    from datetime import datetime
+
+    message = mistral_client.current_date_system_message()
+
+    assert message["role"] == "system"
+    assert datetime.now().strftime("%Y-%m-%d") in message["content"]

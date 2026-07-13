@@ -57,7 +57,12 @@ mistralBot/
 
 ## Launch convenience (Windows)
 - A `mistralbot` PowerShell function is added to the user's `$PROFILE`, pointing at this project's `chat.py`. Once added, running `mistralbot` from any directory in any new PowerShell window launches the chat app — no `cd` or `python chat.py` needed.
-- This is a per-machine, local convenience (the function lives in `$PROFILE`, not in the repo) — each machine that clones the repo adds its own function pointing at its own clone path. `README.md` documents the one-line setup.
+- This is a per-machine, local convenience (the function lives in `$PROFILE`, not in the repo) — each machine that clones the repo adds its own function pointing at its own clone path.
+- `setup.ps1` (repo root) automates this: installs dependencies and appends the profile function in one step, idempotently (marker-comment guarded, safe to re-run). `README.md` documents it as the primary setup path, with manual `pip install` as a fallback.
+
+## Known-fixed issues
+- **Stale date grounding (fixed, Story 14):** the model previously had no notion of the real current date and inferred it from its training cutoff, sometimes several days off, which threw off how it judged the recency of web-search results. Every model request now carries a system message stating the actual current date/time.
+- **Autocomplete Enter bug (fixed, Story 15):** typing a partial slash command and pressing Enter used to submit the raw partial text as a chat message instead of running the command, because no suggestion was preselected by default. The dropdown now preselects the first match, and Enter completes it into the input line (matching Tab) rather than submitting prematurely.
 
 ## Distribution
 - Source is published on GitHub (`github.com/badhan-kv/TerminalAIChat`, public, MIT licensed) so it can be cloned onto other machines.

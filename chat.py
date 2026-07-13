@@ -78,6 +78,36 @@ class SlashCommandCompleter(Completer):
                 yield Completion(command, start_position=-len(text))
 
 
+def preselect_first_completion(buffer) -> None:
+    """Highlight the first dropdown entry as soon as completions appear, so
+    Enter has something sensible to complete instead of falling through to
+    the partially-typed text as a raw chat message.
+    """
+    state = buffer.complete_state
+    if state is not None and state.complete_index is None and state.completions:
+        state.complete_index = 0
+
+
+def handle_enter(buffer, commands: list[str]) -> None:
+    """Enter completes a highlighted/preselected slash-command suggestion into
+    the input line (matching Tab's behavior) instead of submitting the
+    partially-typed text. Once the buffer holds a complete, exact command (or
+    isn't a slash command at all), Enter submits normally.
+    """
+    state = buffer.complete_state
+    if state is not None and state.completions and buffer.document.text not in commands:
+        completion = state.completions[state.complete_index or 0]
+        buffer.apply_completion(completion)
+        return
+    buffer.validate_and_handle()
+
+
+def make_repl_key_bindings(commands: list[str]) -> KeyBindings:
+    kb = KeyBindings()
+    kb.add("enter")(lambda event: handle_enter(event.current_buffer, commands))
+    return kb
+
+
 def pick_model(current_model: str, models: list[str] = mistral_client.FREE_TIER_MODELS) -> str | None:
     """Show an arrow-key/number-selectable list of models in the terminal.
 
@@ -264,8 +294,11 @@ def main() -> None:
     session_path = history.start_session()
     last_listed_sessions: list[dict] = []
     prompt_session = PromptSession(
-        completer=SlashCommandCompleter(SLASH_COMMANDS), complete_while_typing=True
+        completer=SlashCommandCompleter(SLASH_COMMANDS),
+        complete_while_typing=True,
+        key_bindings=make_repl_key_bindings(SLASH_COMMANDS),
     )
+    prompt_session.default_buffer.on_completions_changed += preselect_first_completion
 
     console.print("mistralBot ready. Type /exit to quit, /logout to clear saved keys.")
 
