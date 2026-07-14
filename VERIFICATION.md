@@ -129,6 +129,17 @@ A story is done when:
 - No unit tests — shell script, not application logic; verified manually only.
 - *Manual smoke test:* in a fresh clone, run `.\setup.ps1`, confirm dependencies install and `$PROFILE` gains the `mistralbot` function; run it a second time and confirm no duplicate block is added; open a new PowerShell window and confirm `mistralbot` launches the app from any directory.
 
+### Story 17 — Local file reading (`files.py`, `/read`, `/ls`, permission gate, path completion)
+- `files.read_file` reads plain-text files as text, and PDFs (by `.pdf` extension) via `pypdf`, joining extracted per-page text.
+- `files.list_dir` returns a sorted directory listing with subdirectories suffixed `/`.
+- The first use of `/read` or `/ls` in a chat session prompts `1) Allow once  2) Allow this session  3) Deny` (`chat.request_file_permission`); "Allow this session" suppresses the prompt for all further `/read`/`/ls` calls that session; anything other than 1/2 denies. Both commands share this one gate.
+- `/read <path>` loads the file's contents into `messages` and on-disk history as a single user-role turn, prints a `Loaded <path> (<N> chars) into context.` confirmation, and does **not** trigger a model reply — the next normal message is what asks about it.
+- `/ls <dir>` prints the directory listing to the console only; it never touches `messages`/history.
+- Typing `/read ` or `/ls ` and pressing Tab autocompletes filesystem paths (`chat.PathAwareCompleter`) instead of showing slash-command suggestions; `/ls` only offers directories.
+- Bad paths (missing file/dir, reading a directory as a file) print a clean `[red]Error: ...[/red]` rather than crashing the REPL.
+- Unit tests: `test_files.py` covers `read_file` (text, PDF via mocked `pypdf.PdfReader`, missing path, directory-as-file), `list_dir` (sorting, dir suffix, missing path), `format_file_context`. `test_chat.py` covers `request_file_permission`'s three branches plus the unrecognized-input case, and `PathAwareCompleter`'s dispatch to file/dir/slash-command completion.
+- *Manual smoke test:* run `python chat.py`, type `/ls .` — confirm the permission prompt appears, choose `1` (allow once), confirm the directory listing prints; run `/read <a .txt file>` and confirm the prompt appears *again* (only "once" was granted last time). Restart, this time choose `2` (allow this session) on the first prompt, then run several more `/read`/`/ls` commands and confirm no further prompts appear. `/read` a `.txt` or `.py` file, then ask a normal follow-up question about it (e.g. "what does this file do?") and confirm the answer reflects the actual file content. `/read` a small PDF and confirm a sensible non-zero char count in the confirmation, then ask a follow-up question about its content. Try `/read` on a nonexistent path and confirm a clean error, no crash. Type `/read ` (trailing space) and press Tab — confirm filesystem paths autocomplete rather than slash commands.
+
 ## Notes
 - Stories are ordered so each one is runnable/demoable on its own — no story depends on a later one.
 - Story 11 is written last since it documents behavior from Stories 1-10, but the `HELP.md` content should be updated incrementally as each earlier story lands, not written all at once at the end (already true in practice — see the Ctrl+C caveat and `--max-tokens` docs added ahead of schedule).

@@ -175,3 +175,72 @@ def test_handle_enter_submits_normally_for_non_slash_text():
     chat.handle_enter(buffer, chat.SLASH_COMMANDS)
 
     buffer.validate_and_handle.assert_called_once()
+
+
+def test_request_file_permission_skips_prompt_when_already_allowed():
+    proceed, new_flag = chat.request_file_permission(True)
+
+    assert proceed is True
+    assert new_flag is True
+
+
+@patch("builtins.input", return_value="1")
+def test_request_file_permission_allow_once_does_not_set_session_flag(mock_input):
+    proceed, new_flag = chat.request_file_permission(False)
+
+    assert proceed is True
+    assert new_flag is False
+
+
+@patch("builtins.input", return_value="2")
+def test_request_file_permission_allow_session_sets_flag(mock_input):
+    proceed, new_flag = chat.request_file_permission(False)
+
+    assert proceed is True
+    assert new_flag is True
+
+
+@patch("builtins.input", return_value="3")
+def test_request_file_permission_deny(mock_input):
+    proceed, new_flag = chat.request_file_permission(False)
+
+    assert proceed is False
+    assert new_flag is False
+
+
+@patch("builtins.input", return_value="anything else")
+def test_request_file_permission_unrecognized_input_denies(mock_input):
+    proceed, new_flag = chat.request_file_permission(False)
+
+    assert proceed is False
+    assert new_flag is False
+
+
+def test_path_aware_completer_delegates_to_path_completion_for_read():
+    completer = chat.PathAwareCompleter(["/exit", "/read"])
+
+    with patch.object(completer.file_completer, "get_completions", return_value=iter([])) as mock_get:
+        list(completer.get_completions(Document("/read some/pa"), None))
+
+    mock_get.assert_called_once()
+    sub_document = mock_get.call_args[0][0]
+    assert sub_document.text == "some/pa"
+
+
+def test_path_aware_completer_delegates_to_dir_only_completion_for_ls():
+    completer = chat.PathAwareCompleter(["/exit", "/ls"])
+
+    with patch.object(completer.dir_completer, "get_completions", return_value=iter([])) as mock_get:
+        list(completer.get_completions(Document("/ls sub"), None))
+
+    mock_get.assert_called_once()
+    sub_document = mock_get.call_args[0][0]
+    assert sub_document.text == "sub"
+
+
+def test_path_aware_completer_falls_back_to_slash_commands():
+    completer = chat.PathAwareCompleter(["/exit", "/model"])
+
+    completions = [c.text for c in completer.get_completions(Document("/mo"), None)]
+
+    assert completions == ["/model"]

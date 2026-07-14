@@ -20,11 +20,17 @@ A free, terminal-based AI chat tool for PowerShell, powered by Mistral's free AP
 
 ## Chat session behavior
 - Multi-turn memory kept in-process for the life of the session.
-- Slash commands: `/search <q>`, `/model <name>`, `/max-tokens <n>`, `/history`, `/search-history "<text>"`, `/resume <n>`, `/delete-history contains "<text>"` / `/delete-history before <date>`, `/clear` (reset in-memory history), `/logout` (delete stored API keys), `/help`, `/exit`.
+- Slash commands: `/search <q>`, `/model <name>`, `/max-tokens <n>`, `/history`, `/search-history "<text>"`, `/resume <n>`, `/delete-history contains "<text>"` / `/delete-history before <date>`, `/clear` (reset in-memory history), `/logout` (delete stored API keys), `/read <path>`, `/ls <dir>`, `/help`, `/exit`.
 - Launch flags: `--model <name>`, `--max-tokens <n>`.
 - Typing `/` shows a live autocomplete dropdown of matching commands (via `prompt_toolkit`), narrowing as you type more characters; Tab/Enter completes the selection.
 - Each session's transcript is written to its own JSON file under `history/` (e.g. `history/2026-07-11_143000.json`) as it progresses, so a crash doesn't lose the log.
 - History files persist indefinitely unless removed via `/delete-history` or manually — no automatic/age-based cleanup (a deliberate choice: history is treated as retrievable storage via `/history` / `/search-history` / `/resume`, not a cache to be silently pruned).
+
+## Local file access
+- `/read <path>` loads a file's contents into chat context (as a turn, once — not re-pinned on every later request); `/ls <dir>` lists a directory's contents to help pick a file. Both Tab-complete filesystem paths like a terminal (`/ls` offers directories only). Neither is restricted to the launch directory — any path the user can specify is fair game.
+- Both commands are gated by a shared, session-scoped permission prompt (`1) Allow once  2) Allow this session  3) Deny`) that appears the first time either is used in a session. Nothing persists across sessions/restarts.
+- `/read` does not trigger a model reply itself (state-setting, like `/model`/`/max-tokens`) — the user's next normal message is what asks about the loaded file.
+- PDFs are converted to text locally via `pypdf` before injection; no document/image upload to Mistral. Other files are read as plain text with no size or type restriction — best-effort, garbled content on non-text files is an accepted tradeoff rather than building an allowlist.
 
 ## Credential handling
 - First run: interactively prompt for `MISTRAL_API_KEY` and `TAVILY_API_KEY`.
@@ -38,6 +44,7 @@ mistralBot/
   chat.py              # entry point / REPL loop
   mistral_client.py    # Mistral API calls incl. tool-calling + streaming
   search.py            # Tavily API wrapper
+  files.py             # local file/dir reading (incl. PDF-to-text)
   history.py           # session JSON logging
   config.py            # credential prompt/load/save/logout
   requirements.txt

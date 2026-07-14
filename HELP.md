@@ -19,6 +19,8 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 - `/model <name>` — sets the model directly without opening the picker, for when you already know the exact model name.
   Note: free-tier response latency varies by model — the smaller/open-weight ones (e.g. `ministral-3b-latest`) can occasionally take 30-60s, noticeably slower than the flagship models. Requests time out and show an error after 60s rather than hanging indefinitely.
 - `/search <query>` — forces a live Tavily web search for `<query>` and asks the model to answer using those results, regardless of whether it would have searched on its own. If the search fails or returns nothing, the model still answers and notes that no results were found rather than crashing.
+- `/ls <dir>` — lists a directory's contents (subdirectories shown with a trailing `/`). Tab-completes paths as you type, and only offers directories. See "Local file access" below for the permission prompt.
+- `/read <path>` — loads a file's contents into the conversation context and prints a confirmation (`Loaded <path> (<N> chars) into context.`). It does **not** trigger a reply by itself — ask your question as a normal follow-up message afterwards. Tab-completes paths as you type. See "Local file access" below.
 - `/history` — lists all past session files, newest first: index number, timestamp, a short preview of the first user message, and turn count.
 - `/search-history "<text>"` — same listing as `/history`, filtered to sessions where any turn (user or assistant) contains `<text>` (case-insensitive).
 - `/resume <n>` — loads session `<n>` (from the last `/history`/`/search-history` listing) into the current conversation so follow-ups have that old context again. Subsequent turns are appended to that session's file instead of the new one created at launch; the just-created empty launch file is removed if nothing was said in it yet.
@@ -31,6 +33,17 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 
 ## Slash-command autocomplete
 Typing `/` at the prompt shows a live dropdown of every available command below the input line. Keep typing to narrow it (e.g. `/mo` narrows to `/model`). Tab or Enter on a highlighted suggestion completes it into the input line. Ctrl+C and Ctrl+D still cancel/exit as documented above — that didn't change.
+
+## Local file access
+`/read` and `/ls` can access any file or directory you can specify a path to — not just the folder `chat.py` was launched from — so the first time either is used in a session you're asked:
+```
+This command reads from the local filesystem. 1) Allow once  2) Allow this session  3) Deny
+```
+- **Allow once** — proceeds with just that one `/read` or `/ls`, and asks again next time.
+- **Allow this session** — proceeds, and no further prompts appear for `/read` or `/ls` for the rest of this chat session (the choice does not persist across restarts).
+- **Deny** (or anything else) — cancels that command, nothing is read.
+
+`/read` supports PDFs: the text is extracted locally (via `pypdf`) before being added to context — nothing is uploaded to Mistral as a document or image. Scanned/image-only PDFs with no text layer will extract as empty or near-empty text. Any other file is read as plain text; non-text/binary files may produce garbled content in the model's context since there's no type restriction.
 
 ## Automatic web search grounding
 When you ask a normal question (not `/search`), the model is offered a `web_search` tool and can choose to call it on its own if the question needs current/real-time information. If it does, you'll see `Model requested a web search: <query>` before the (now-grounded) reply streams in. General-knowledge questions skip this and answer directly.

@@ -10,6 +10,7 @@ A free, terminal-based AI chat tool for PowerShell, powered by Mistral's free AP
 - Multi-turn in-session memory, with every session logged to `history/` so you can browse, search, and resume past chats.
 - Slash-command autocomplete (type `/` for a live dropdown).
 - Model/token switching mid-chat (`/model`, `/max-tokens`).
+- Local file access: `/read <path>` loads a file (including PDFs, converted to text locally) into chat context, `/ls <dir>` browses a directory first — both Tab-complete paths and are gated behind a one-time-per-session permission prompt.
 
 Run `/help` in-chat or `python chat.py --help` for the full command reference, or see `HELP.md`.
 
@@ -65,6 +66,14 @@ Type `/help` in-chat for the full command list, or see `HELP.md`.
 
 ## Setting up on another machine
 Repeat steps 1–3 above on the new machine — each machine keeps its own cached API keys and its own `mistralbot` profile function pointing at wherever you cloned the repo there.
+
+## Updating an existing install
+From inside the cloned folder:
+```powershell
+git pull
+pip install -r requirements.txt
+```
+This only touches files tracked in the repo. Anything machine-local and outside the repo — cached API keys (`%LOCALAPPDATA%\mistralBot\config.json`), session history (`history/`), and unrelated local machine settings (e.g. a root certificate under `Documents\`) — is untouched by `git pull`, so there's nothing to back up first. If you have uncommitted edits to a tracked file on that machine, run `git status` before pulling; `git pull` will refuse to overwrite them rather than silently discarding anything.
 
 ## License
 MIT — see `LICENSE`.

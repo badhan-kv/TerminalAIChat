@@ -5,7 +5,8 @@ import json
 import sys
 
 from prompt_toolkit import Application, PromptSession
-from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.completion import Completer, Completion, PathCompleter
+from prompt_toolkit.document import Document
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
@@ -15,6 +16,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 
 import config
+import files
 import history
 import mistral_client
 import search
@@ -30,9 +32,11 @@ SLASH_COMMANDS = [
     "/exit",
     "/help",
     "/history",
+    "/ls",
     "/logout",
     "/max-tokens",
     "/model",
+    "/read",
     "/resume",
     "/search",
     "/search-history",
@@ -47,6 +51,8 @@ HELP_TEXT = """\
   /model <name>                          set model directly
   /max-tokens <n>                        set generation cap for subsequent replies
   /search <query>                        force a web search for this turn
+  /ls <dir>                              list a directory's contents (Tab-completes paths)
+  /read <path>                           load a file's contents into context (Tab-completes paths)
   /history                               list past sessions, newest first
   /search-history "<text>"               list sessions where any turn contains <text>
   /resume <n>                            resume session <n> from the last listing
@@ -56,6 +62,8 @@ HELP_TEXT = """\
   /delete-history before <YYYY-MM-DD>    delete sessions older than that date (confirm)
   /help                                  show this help
 
+[bold]File access[/bold]  /read and /ls prompt for permission (allow once / allow this session / deny)
+                    the first time either is used in a session; PDFs are converted to text locally.
 [bold]Launch flags[/bold]  --model <name>   --max-tokens <n>   (see python chat.py --help)
 [bold]Autocomplete[/bold]  type / to see a command dropdown; Tab/Enter completes the highlighted one.
 Full reference: HELP.md"""
@@ -76,6 +84,29 @@ class SlashCommandCompleter(Completer):
         for command in self.commands:
             if command.startswith(text):
                 yield Completion(command, start_position=-len(text))
+
+
+class PathAwareCompleter(Completer):
+    """Delegates to slash-command completion normally, but switches to
+    filesystem path completion once the buffer starts with '/read ' or
+    '/ls ' (directories-only for '/ls'), so paths Tab-complete like a
+    terminal.
+    """
+
+    def __init__(self, commands: list[str]):
+        self.command_completer = SlashCommandCompleter(commands)
+        self.file_completer = PathCompleter(expanduser=True)
+        self.dir_completer = PathCompleter(expanduser=True, only_directories=True)
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        for prefix, completer in (("/read ", self.file_completer), ("/ls ", self.dir_completer)):
+            if text.startswith(prefix):
+                path_text = text[len(prefix):]
+                sub_document = Document(path_text, len(path_text))
+                yield from completer.get_completions(sub_document, complete_event)
+                return
+        yield from self.command_completer.get_completions(document, complete_event)
 
 
 def preselect_first_completion(buffer) -> None:
@@ -199,6 +230,27 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def request_file_permission(file_access_allowed: bool) -> tuple[bool, bool]:
+    """Gate local filesystem access behind an explicit prompt.
+
+    If already granted for this session, returns immediately without
+    prompting. Otherwise asks once and returns (proceed, new_session_flag).
+    """
+    if file_access_allowed:
+        return True, True
+    console.print(
+        "[yellow]This command reads from the local filesystem. "
+        "1) Allow once  2) Allow this session  3) Deny[/yellow]"
+    )
+    choice = input("> ").strip()
+    if choice == "1":
+        return True, False
+    if choice == "2":
+        return True, True
+    console.print("[dim]Denied.[/dim]")
+    return False, file_access_allowed
+
+
 def run_search(query: str, api_key: str) -> str:
     """Run a Tavily search and return formatted results text, or a not-found note on failure."""
     try:
@@ -293,8 +345,9 @@ def main() -> None:
     messages: list[dict] = []
     session_path = history.start_session()
     last_listed_sessions: list[dict] = []
+    file_access_allowed = False
     prompt_session = PromptSession(
-        completer=SlashCommandCompleter(SLASH_COMMANDS),
+        completer=PathAwareCompleter(SLASH_COMMANDS),
         complete_while_typing=True,
         key_bindings=make_repl_key_bindings(SLASH_COMMANDS),
     )
@@ -422,6 +475,44 @@ def main() -> None:
             paths = exclude_active_session(paths, session_path)
             if confirm_and_delete(paths, label):
                 last_listed_sessions = []
+            continue
+
+        if user_input.startswith("/ls"):
+            arg = user_input[len("/ls"):].strip()
+            if not arg:
+                console.print("[yellow]Usage: /ls <dir>[/yellow]")
+                continue
+            proceed, file_access_allowed = request_file_permission(file_access_allowed)
+            if not proceed:
+                continue
+            try:
+                entries = files.list_dir(arg)
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                continue
+            if not entries:
+                console.print("[dim](empty directory)[/dim]")
+            else:
+                for entry in entries:
+                    console.print(entry)
+            continue
+        if user_input.startswith("/read"):
+            arg = user_input[len("/read"):].strip()
+            if not arg:
+                console.print("[yellow]Usage: /read <path>[/yellow]")
+                continue
+            proceed, file_access_allowed = request_file_permission(file_access_allowed)
+            if not proceed:
+                continue
+            try:
+                file_content = files.read_file(arg)
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                continue
+            context = files.format_file_context(arg, file_content)
+            messages.append({"role": "user", "content": context})
+            history.append_turn(session_path, "user", context)
+            console.print(f"[yellow]Loaded {arg} ({len(file_content)} chars) into context.[/yellow]")
             continue
 
         if user_input.startswith("/search"):
