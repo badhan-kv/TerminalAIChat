@@ -1,4 +1,6 @@
 CHECKPOINT.md
+SPEC.md
+VERIFICATION.md
 .claude/
 __pycache__/
 .pytest_cache/
