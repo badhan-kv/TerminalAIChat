@@ -14,6 +14,13 @@ A free, terminal-based AI chat tool for PowerShell, powered by Mistral's free AP
 
 Run `/help` in-chat or `python chat.py --help` for the full command reference, or see `HELP.md`.
 
+## Publishing history
+
+This project was originally published to GitHub on 13 July 2026. The repository
+was deleted and re-published on 10 September 2026 to resolve a technical problem
+with GitHub's cached repository metadata; the code and commit history are
+otherwise unchanged.
+
 ## Prerequisites
 - **Python 3** (3.10+) — check with `python --version`. Get it from [python.org](https://www.python.org/downloads/) if missing.
 - **Git** — check with `git --version`. Get it from [git-scm.com](https://git-scm.com/downloads) if missing.
