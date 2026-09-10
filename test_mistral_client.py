@@ -102,7 +102,7 @@ def test_get_tool_calls_returns_message_with_tool_calls(mock_system_message):
     assert message.tool_calls == [tool_call]
     client.chat.complete.assert_called_once_with(
         model="mistral-small-latest",
-        messages=[FAKE_SYSTEM_MESSAGE] + messages,
+        messages=[FAKE_SYSTEM_MESSAGE, mistral_client.WEB_SEARCH_AVAILABLE_MESSAGE] + messages,
         max_tokens=mistral_client.DEFAULT_MAX_TOKENS,
         tools=[mistral_client.WEB_SEARCH_TOOL],
         tool_choice="auto",

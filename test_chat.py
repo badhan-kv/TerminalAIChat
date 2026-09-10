@@ -64,6 +64,48 @@ def test_maybe_auto_search_does_nothing_when_model_answers_directly(mock_get_too
 
     mock_run_search.assert_not_called()
     assert len(messages) == 1
+    assert mock_get_tool_calls.call_args.kwargs["force"] is False
+
+
+@patch("chat.run_search", return_value="results")
+@patch("chat.mistral_client.get_tool_calls")
+def test_maybe_auto_search_forces_tool_for_time_sensitive_query(mock_get_tool_calls, mock_run_search):
+    mock_get_tool_calls.return_value = MagicMock(content="", tool_calls=[_fake_tool_call()])
+    messages = [{"role": "user", "content": "what's the weather today?"}]
+
+    chat.maybe_auto_search(client=MagicMock(), model="ministral-8b-latest", messages=messages, tavily_key="key", max_tokens=1024)
+
+    assert mock_get_tool_calls.call_count == 1
+    assert mock_get_tool_calls.call_args.kwargs["force"] is True
+    mock_run_search.assert_called_once()
+
+
+@patch("chat.run_search", return_value="results")
+@patch("chat.mistral_client.get_tool_calls")
+def test_maybe_auto_search_retries_forced_when_model_refuses(mock_get_tool_calls, mock_run_search):
+    refusal = MagicMock(content="Sorry, I can't access the internet.", tool_calls=None)
+    grounded = MagicMock(content="", tool_calls=[_fake_tool_call()])
+    mock_get_tool_calls.side_effect = [refusal, grounded]
+    messages = [{"role": "user", "content": "who is the ceo of that startup"}]
+
+    chat.maybe_auto_search(client=MagicMock(), model="ministral-8b-latest", messages=messages, tavily_key="key", max_tokens=1024)
+
+    assert mock_get_tool_calls.call_count == 2
+    assert mock_get_tool_calls.call_args_list[0].kwargs["force"] is False
+    assert mock_get_tool_calls.call_args_list[1].kwargs["force"] is True
+    mock_run_search.assert_called_once()
+
+
+@patch("chat.run_search")
+@patch("chat.mistral_client.get_tool_calls")
+def test_maybe_auto_search_no_retry_when_direct_answer_is_fine(mock_get_tool_calls, mock_run_search):
+    mock_get_tool_calls.return_value = MagicMock(content="2 + 2 is 4.", tool_calls=None)
+    messages = [{"role": "user", "content": "what is 2+2?"}]
+
+    chat.maybe_auto_search(client=MagicMock(), model="ministral-8b-latest", messages=messages, tavily_key="key", max_tokens=1024)
+
+    assert mock_get_tool_calls.call_count == 1
+    mock_run_search.assert_not_called()
 
 
 def test_exclude_active_session_removes_the_active_path():

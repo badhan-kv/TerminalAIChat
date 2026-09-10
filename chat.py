@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 
 from prompt_toolkit import Application, PromptSession
@@ -271,14 +272,64 @@ def run_search(query: str, api_key: str) -> str:
     return search.format_results(results)
 
 
+# Queries that need live data but that a weak model often answers from stale
+# training data (or refuses outright). When the latest user turn matches, we
+# force the web_search tool instead of leaving the choice to the model.
+_TIME_SENSITIVE_RE = re.compile(
+    r"\b(weather|forecast|temperature|news|headline|today|tonight|tomorrow|"
+    r"currently|right now|latest|current|price|stock|score|who won|"
+    r"this (week|month|year)|as of)\b",
+    re.IGNORECASE,
+)
+
+# Phrases a model emits when it declines instead of calling the tool. If we see
+# these in a direct (non-tool) answer, we retry once with the tool forced.
+_REFUSAL_MARKERS = (
+    "can't access",
+    "cannot access",
+    "don't have access",
+    "do not have access",
+    "unable to access",
+    "can't browse",
+    "cannot browse",
+    "real-time",
+    "real time",
+    "no internet",
+    "not connected to the internet",
+    "as an ai",
+)
+
+
+def _looks_like_refusal(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+
+
+def _latest_user_text(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            return message.get("content", "")
+    return ""
+
+
 def maybe_auto_search(client, model: str, messages: list[dict], tavily_key: str, max_tokens: int) -> None:
     """Ask the model if it wants to call web_search; if so, run it and append
     the tool-call/tool-result messages to `messages` in place so the next
     completion call is grounded.
+
+    The choice isn't left entirely to the model: obviously time-sensitive
+    queries force the tool up front, and a direct answer that reads as an
+    "I can't access the internet" refusal triggers one forced retry.
     """
+    forced = bool(_TIME_SENSITIVE_RE.search(_latest_user_text(messages)))
     message = mistral_client.get_tool_calls(
-        client, model, messages, max_tokens, on_retry=notify_retry
+        client, model, messages, max_tokens, on_retry=notify_retry, force=forced
     )
+    if not message.tool_calls and not forced and _looks_like_refusal(message.content):
+        console.print("[dim]Model declined to search; retrying with web search forced.[/dim]")
+        message = mistral_client.get_tool_calls(
+            client, model, messages, max_tokens, on_retry=notify_retry, force=True
+        )
     if not message.tool_calls:
         return
 

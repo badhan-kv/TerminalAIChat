@@ -97,6 +97,19 @@ WEB_SEARCH_TOOL = {
 }
 
 
+WEB_SEARCH_AVAILABLE_MESSAGE = {
+    "role": "system",
+    "content": (
+        "You have a `web_search` tool that fetches live results from the "
+        "internet. You are NOT offline: whenever a question needs current, "
+        "real-time, or recent information (weather, news, prices, sports "
+        "scores, anything about 'today' or the 'latest'), call web_search "
+        "instead of replying that you cannot access the internet or lack "
+        "real-time data."
+    ),
+}
+
+
 def make_client(api_key: str, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> Mistral:
     return Mistral(api_key=api_key, timeout_ms=timeout_ms)
 
@@ -145,19 +158,24 @@ def get_tool_calls(
     messages: list[dict],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     on_retry=None,
+    force: bool = False,
 ):
     """Ask the model (non-streaming) whether it wants to call the web_search tool
     before answering. Returns the response message; `.tool_calls` is falsy if
     the model chose to answer directly.
+
+    `force=True` sets tool_choice="any", making the model emit a web_search call
+    regardless of its own judgement — used for queries the caller already knows
+    are time-sensitive, and as a fallback when a weak model wrongly refuses.
     """
-    full_messages = [current_date_system_message()] + messages
+    full_messages = [current_date_system_message(), WEB_SEARCH_AVAILABLE_MESSAGE] + messages
     response = _with_retries(
         lambda: client.chat.complete(
             model=model,
             messages=full_messages,
             max_tokens=max_tokens,
             tools=[WEB_SEARCH_TOOL],
-            tool_choice="auto",
+            tool_choice="any" if force else "auto",
         ),
         model=model,
         on_retry=on_retry,

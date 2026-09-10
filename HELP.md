@@ -51,6 +51,8 @@ This command reads from the local filesystem. 1) Allow once  2) Allow this sessi
 ## Automatic web search grounding
 When you ask a normal question (not `/search`), the model is offered a `web_search` tool and can choose to call it on its own if the question needs current/real-time information. If it does, you'll see `Model requested a web search: <query>` before the (now-grounded) reply streams in. General-knowledge questions skip this and answer directly.
 
+The choice isn't left entirely to the model (the small free-tier default doesn't always volunteer a search and can wrongly answer "I can't access the internet"): questions that clearly need live data — weather, news, prices, scores, anything about "today"/"latest"/"current" — force the search up front, and if a direct answer reads as an "I can't access the internet" refusal, the search is retried once with the tool forced (`Model declined to search; retrying with web search forced.`).
+
 ## Cancelling a response (Ctrl+C)
 Pressing Ctrl+C while a reply is streaming cancels *your view* of it and drops you back to the `>` prompt — it does not crash the program.
 
