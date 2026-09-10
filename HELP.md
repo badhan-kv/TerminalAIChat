@@ -6,8 +6,11 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 ## Launch flags
 - `--max-tokens N` — caps how many tokens the model may generate per reply (default: 1024). Lower it for shorter/cheaper replies, raise it if replies are getting cut off mid-thought.
   Example: `python chat.py --max-tokens 2048`
-- `--model NAME` — sets the model for the session (default: `mistral-small-latest`).
-  Example: `python chat.py --model mistral-large-latest`
+- `--model NAME` — sets the model for the session (default: `ministral-8b-latest`).
+  Example: `python chat.py --model ministral-3b-latest`
+  Note: as of Sep 2026 the Mistral free tier no longer includes `mistral-small`, `mistral-medium`, or
+  `mistral-large` — calling them returns HTTP 429 with a 0 req/min limit (or 403). Use `ministral-8b-latest`,
+  `ministral-3b-latest`, `ministral-14b-latest`, `open-mistral-nemo`, or `codestral-latest`.
 - `--help` / `-h` — prints this launch-flag usage and exits immediately, without prompting for API keys or starting a chat session.
 
 ## In-chat commands
@@ -15,7 +18,7 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 - `/clear` — resets in-memory conversation context; the next question gets no prior context. Does not delete or affect the on-disk session transcript already written — that log is untouched, future turns just keep appending to it after the gap.
 - `/logout` — delete the cached API keys (`%LOCALAPPDATA%\mistralBot\config.json`) and quit. Next run will prompt for keys again.
 - `/max-tokens <n>` — change the generation cap for subsequent replies without restarting (same effect as launching with `--max-tokens n`).
-- `/model` — opens an interactive picker of Mistral's free-tier chat models: Up/Down arrows + Enter to select, or press a number key (1-6) to jump straight to that model. Esc or Ctrl+C cancels without changing anything.
+- `/model` — opens an interactive picker of Mistral's free-tier chat models: Up/Down arrows + Enter to select, or press a number key (1-5) to jump straight to that model. Esc or Ctrl+C cancels without changing anything.
 - `/model <name>` — sets the model directly without opening the picker, for when you already know the exact model name.
   Note: free-tier response latency varies by model — the smaller/open-weight ones (e.g. `ministral-3b-latest`) can occasionally take 30-60s, noticeably slower than the flagship models. Requests time out and show an error after 60s rather than hanging indefinitely.
 - `/search <query>` — forces a live Tavily web search for `<query>` and asks the model to answer using those results, regardless of whether it would have searched on its own. If the search fails or returns nothing, the model still answers and notes that no results were found rather than crashing.

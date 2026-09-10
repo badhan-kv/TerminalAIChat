@@ -198,11 +198,22 @@ def pick_model(current_model: str, models: list[str] = mistral_client.FREE_TIER_
     return result["value"]
 
 
+def notify_retry(attempt: int, delay: float, exc) -> None:
+    """Tell the user we hit a rate limit / transient error and are backing off."""
+    reason = "rate limited" if exc.status_code == 429 else f"server error {exc.status_code}"
+    console.print(
+        f"[yellow]Mistral {reason}; retrying in {delay:.1f}s "
+        f"(attempt {attempt}/{mistral_client.MAX_RETRIES})…[/yellow]"
+    )
+
+
 def stream_reply(client, model: str, messages: list[dict], max_tokens: int) -> str:
     """Stream a reply to the console with live markdown rendering, return full text."""
     full_text = ""
     with Live(console=console, refresh_per_second=15) as live:
-        for chunk in mistral_client.stream_message(client, model, messages, max_tokens):
+        for chunk in mistral_client.stream_message(
+            client, model, messages, max_tokens, on_retry=notify_retry
+        ):
             full_text += chunk
             live.update(Markdown(full_text))
     return full_text
@@ -265,7 +276,9 @@ def maybe_auto_search(client, model: str, messages: list[dict], tavily_key: str,
     the tool-call/tool-result messages to `messages` in place so the next
     completion call is grounded.
     """
-    message = mistral_client.get_tool_calls(client, model, messages, max_tokens)
+    message = mistral_client.get_tool_calls(
+        client, model, messages, max_tokens, on_retry=notify_retry
+    )
     if not message.tool_calls:
         return
 

@@ -66,7 +66,7 @@ First run prompts for your Mistral and Tavily API keys (input hidden) and caches
 ## Everyday use
 ```powershell
 mistralbot                       # start a chat
-mistralbot --model mistral-large-latest
+mistralbot --model ministral-3b-latest
 mistralbot --max-tokens 2048
 ```
 Type `/help` in-chat for the full command list, or see `HELP.md`.

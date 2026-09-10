@@ -1,6 +1,18 @@
 from unittest.mock import MagicMock, patch
 
+import httpx
+import pytest
+from mistralai.client.errors import SDKError
+
 import mistral_client
+
+
+def _rate_limit_error(retry_after: str | None = None, limit_req_minute: str = "60") -> SDKError:
+    headers = {"x-ratelimit-limit-req-minute": limit_req_minute}
+    if retry_after is not None:
+        headers["retry-after"] = retry_after
+    response = httpx.Response(429, headers=headers, text='{"code":"1300"}')
+    return SDKError("API error occurred", response)
 
 FAKE_SYSTEM_MESSAGE = {"role": "system", "content": "The current date is a fake fixed date."}
 
@@ -172,6 +184,63 @@ def test_stream_message_passes_model_max_tokens_and_history(mock_system_message)
     client.chat.stream.assert_called_once_with(
         model="mistral-large-latest", messages=[FAKE_SYSTEM_MESSAGE] + messages, max_tokens=64
     )
+
+
+@patch("mistral_client.time.sleep")
+def test_send_message_retries_on_rate_limit_then_succeeds(mock_sleep):
+    client = MagicMock()
+    ok = MagicMock()
+    ok.choices = [MagicMock(message=MagicMock(content="recovered"))]
+    client.chat.complete.side_effect = [_rate_limit_error(), _rate_limit_error(), ok]
+
+    result = mistral_client.send_message(client, "mistral-small-latest", [{"role": "user", "content": "hi"}])
+
+    assert result == "recovered"
+    assert client.chat.complete.call_count == 3
+    assert mock_sleep.call_count == 2
+
+
+@patch("mistral_client.time.sleep")
+def test_send_message_gives_up_after_max_retries(mock_sleep):
+    client = MagicMock()
+    client.chat.complete.side_effect = _rate_limit_error()
+
+    with pytest.raises(SDKError):
+        mistral_client.send_message(client, "mistral-small-latest", [{"role": "user", "content": "hi"}])
+
+    assert client.chat.complete.call_count == mistral_client.MAX_RETRIES + 1
+
+
+@patch("mistral_client.time.sleep")
+def test_retry_honors_retry_after_header(mock_sleep):
+    client = MagicMock()
+    ok = MagicMock()
+    ok.choices = [MagicMock(message=MagicMock(content="ok"))]
+    client.chat.complete.side_effect = [_rate_limit_error(retry_after="7"), ok]
+
+    mistral_client.send_message(client, "mistral-small-latest", [{"role": "user", "content": "hi"}])
+
+    mock_sleep.assert_called_once_with(7.0)
+
+
+def test_zero_allowance_429_fails_fast_without_retrying():
+    client = MagicMock()
+    client.chat.complete.side_effect = _rate_limit_error(limit_req_minute="0")
+
+    with pytest.raises(RuntimeError, match="rate limit of 0.*mistral-small-latest"):
+        mistral_client.send_message(client, "mistral-small-latest", [{"role": "user", "content": "hi"}])
+
+    assert client.chat.complete.call_count == 1
+
+
+def test_non_retryable_error_propagates_immediately():
+    client = MagicMock()
+    client.chat.complete.side_effect = SDKError("bad request", httpx.Response(400, text="{}"))
+
+    with pytest.raises(SDKError):
+        mistral_client.send_message(client, "mistral-small-latest", [{"role": "user", "content": "hi"}])
+
+    assert client.chat.complete.call_count == 1
 
 
 def test_current_date_system_message_contains_todays_date():
