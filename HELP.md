@@ -53,6 +53,18 @@ When you ask a normal question (not `/search`), the model is offered a `web_sear
 
 The choice isn't left entirely to the model (the small free-tier default doesn't always volunteer a search and can wrongly answer "I can't access the internet"): questions that clearly need live data — weather, news, prices, scores, anything about "today"/"latest"/"current" — force the search up front, and if a direct answer reads as an "I can't access the internet" refusal, the search is retried once with the tool forced (`Model declined to search; retrying with web search forced.`).
 
+## Web search fails with an SSL / certificate error
+On a machine behind a corporate TLS-inspecting proxy, `requests` (used for Tavily) rejects
+the proxy's self-signed root with `CERTIFICATE_VERIFY_FAILED`, so searches fail while the
+reply still streams ("technical issues retrieving real-time data"). The bot looks for a CA
+bundle in this order and passes it to both the Tavily and Mistral calls:
+1. `REQUESTS_CA_BUNDLE` env var (if set and the file exists)
+2. `SSL_CERT_FILE` env var (same)
+3. `~/Documents/root-cert.pem` (the machine's exported corporate root cert)
+
+Fix: export your corporate/proxy root CA to `Documents\root-cert.pem`, or point one of the
+env vars at it. Nothing to configure on machines that aren't behind such a proxy.
+
 ## Cancelling a response (Ctrl+C)
 Pressing Ctrl+C while a reply is streaming cancels *your view* of it and drops you back to the `>` prompt — it does not crash the program.
 

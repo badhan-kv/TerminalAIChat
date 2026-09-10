@@ -4,8 +4,11 @@ import random
 import time
 from datetime import datetime
 
+import httpx
 from mistralai.client import Mistral
 from mistralai.client.errors import MistralError
+
+import search
 
 DEFAULT_MODEL = "ministral-8b-latest"
 DEFAULT_MAX_TOKENS = 1024
@@ -111,7 +114,9 @@ WEB_SEARCH_AVAILABLE_MESSAGE = {
 
 
 def make_client(api_key: str, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> Mistral:
-    return Mistral(api_key=api_key, timeout_ms=timeout_ms)
+    bundle = search._ca_bundle()
+    http_client = httpx.Client(verify=bundle) if bundle is not True else None
+    return Mistral(api_key=api_key, timeout_ms=timeout_ms, client=http_client)
 
 
 def current_date_system_message() -> dict:

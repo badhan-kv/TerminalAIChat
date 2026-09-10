@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -25,6 +26,27 @@ def test_search_builds_correct_request(mock_post):
     _, kwargs = mock_post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer tvly-testkey"
     assert kwargs["json"] == {"query": "latest news", "max_results": 3}
+    assert "verify" in kwargs
+
+
+@patch.dict("os.environ", {}, clear=True)
+@patch("search.Path.is_file", return_value=False)
+def test_ca_bundle_defaults_to_true(mock_is_file):
+    assert search._ca_bundle() is True
+
+
+@patch.dict("os.environ", {"REQUESTS_CA_BUNDLE": "/etc/ca.pem"}, clear=True)
+@patch("search.Path.is_file", return_value=True)
+def test_ca_bundle_honors_env_var(mock_is_file):
+    assert search._ca_bundle() == "/etc/ca.pem"
+
+
+@patch.dict("os.environ", {}, clear=True)
+def test_ca_bundle_falls_back_to_documents_cert(tmp_path, monkeypatch):
+    cert = tmp_path / "root-cert.pem"
+    cert.write_text("x")
+    monkeypatch.setattr(search, "_FALLBACK_CA_CERT", cert)
+    assert search._ca_bundle() == str(cert)
 
 
 @patch("search.requests.post")

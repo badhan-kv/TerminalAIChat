@@ -1,8 +1,28 @@
 """Tavily web search API wrapper."""
 
+import os
+from pathlib import Path
+
 import requests
 
 TAVILY_URL = "https://api.tavily.com/search"
+
+# Machines behind a TLS-inspecting proxy present a self-signed root that isn't in
+# certifi's bundle, so requests fails with CERTIFICATE_VERIFY_FAILED even though
+# the network is fine. Honor the usual CA-bundle env vars, then fall back to a
+# root cert kept at ~/Documents/root-cert.pem if one is there.
+_FALLBACK_CA_CERT = Path.home() / "Documents" / "root-cert.pem"
+
+
+def _ca_bundle():
+    """Return a CA-bundle path for requests' `verify=`, or True for the default."""
+    for env_var in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+        path = os.environ.get(env_var)
+        if path and Path(path).is_file():
+            return path
+    if _FALLBACK_CA_CERT.is_file():
+        return str(_FALLBACK_CA_CERT)
+    return True
 
 
 def search(query: str, api_key: str, max_results: int = 5) -> list[dict]:
@@ -18,6 +38,7 @@ def search(query: str, api_key: str, max_results: int = 5) -> list[dict]:
         },
         json={"query": query, "max_results": max_results},
         timeout=15,
+        verify=_ca_bundle(),
     )
     response.raise_for_status()
     data = response.json()
