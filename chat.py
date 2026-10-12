@@ -37,10 +37,12 @@ SLASH_COMMANDS = [
     "/logout",
     "/max-tokens",
     "/model",
+    "/norm",
     "/read",
     "/resume",
     "/search",
     "/search-history",
+    "/short",
 ]
 
 HELP_TEXT = """\
@@ -51,6 +53,8 @@ HELP_TEXT = """\
   /model                                 open interactive model picker
   /model <name>                          set model directly
   /max-tokens <n>                        set generation cap for subsequent replies
+  /short                                 ask for short, to-the-point replies
+  /norm                                  normal reply style
   /search <query>                        force a web search for this turn
   /ls <dir>                              list a directory's contents (Tab-completes paths)
   /read <path>                           load a file's contents into context (Tab-completes paths)
@@ -65,7 +69,7 @@ HELP_TEXT = """\
 
 [bold]File access[/bold]  /read and /ls prompt for permission (allow once / allow this session / deny)
                     the first time either is used in a session; PDFs are converted to text locally.
-[bold]Launch flags[/bold]  --model <name>   --max-tokens <n>   (see python chat.py --help)
+[bold]Launch flags[/bold]  --model <name>   --max-tokens <n>   --style short|norm   (see python chat.py --help)
 [bold]Autocomplete[/bold]  type / to see a command dropdown; Tab/Enter completes the highlighted one.
 Full reference: HELP.md"""
 
@@ -208,12 +212,12 @@ def notify_retry(attempt: int, delay: float, exc) -> None:
     )
 
 
-def stream_reply(client, model: str, messages: list[dict], max_tokens: int) -> str:
+def stream_reply(client, model: str, messages: list[dict], max_tokens: int, style: str = "norm") -> str:
     """Stream a reply to the console with live markdown rendering, return full text."""
     full_text = ""
     with Live(console=console, refresh_per_second=15) as live:
         for chunk in mistral_client.stream_message(
-            client, model, messages, max_tokens, on_retry=notify_retry
+            client, model, messages, max_tokens, on_retry=notify_retry, style=style
         ):
             full_text += chunk
             live.update(Markdown(full_text))
@@ -238,6 +242,12 @@ def parse_args() -> argparse.Namespace:
             "at this length; this caps generation length but does not guarantee a lower "
             "token bill if you Ctrl+C cancel early — see HELP.md."
         ),
+    )
+    parser.add_argument(
+        "--style",
+        choices=["short", "norm"],
+        default="norm",
+        help="Reply style: 'short' asks for brief replies (default: norm). Switch in-chat with /short and /norm.",
     )
     return parser.parse_args()
 
@@ -312,7 +322,9 @@ def _latest_user_text(messages: list[dict]) -> str:
     return ""
 
 
-def maybe_auto_search(client, model: str, messages: list[dict], tavily_key: str, max_tokens: int) -> None:
+def maybe_auto_search(
+    client, model: str, messages: list[dict], tavily_key: str, max_tokens: int, style: str = "norm"
+) -> None:
     """Ask the model if it wants to call web_search; if so, run it and append
     the tool-call/tool-result messages to `messages` in place so the next
     completion call is grounded.
@@ -323,12 +335,12 @@ def maybe_auto_search(client, model: str, messages: list[dict], tavily_key: str,
     """
     forced = bool(_TIME_SENSITIVE_RE.search(_latest_user_text(messages)))
     message = mistral_client.get_tool_calls(
-        client, model, messages, max_tokens, on_retry=notify_retry, force=forced
+        client, model, messages, max_tokens, on_retry=notify_retry, force=forced, style=style
     )
     if not message.tool_calls and not forced and _looks_like_refusal(message.content):
         console.print("[dim]Model declined to search; retrying with web search forced.[/dim]")
         message = mistral_client.get_tool_calls(
-            client, model, messages, max_tokens, on_retry=notify_retry, force=True
+            client, model, messages, max_tokens, on_retry=notify_retry, force=True, style=style
         )
     if not message.tool_calls:
         return
@@ -406,6 +418,7 @@ def main() -> None:
     tavily_key = creds["TAVILY_API_KEY"]
     model = args.model
     max_tokens = args.max_tokens
+    style = args.style
     messages: list[dict] = []
     session_path = history.start_session()
     last_listed_sessions: list[dict] = []
@@ -417,7 +430,9 @@ def main() -> None:
     )
     prompt_session.default_buffer.on_completions_changed += preselect_first_completion
 
-    console.print("mistralBot ready. Type /exit to quit, /logout to clear saved keys.")
+    console.print(
+        f"mistralBot ready ({style} replies). Type /exit to quit, /logout to clear saved keys."
+    )
 
     while True:
         try:
@@ -441,6 +456,10 @@ def main() -> None:
             config.logout()
             console.print("Saved credentials cleared. Restart to re-enter them.")
             break
+        if user_input in ("/short", "/norm"):
+            style = "short" if user_input == "/short" else "norm-switch"
+            console.print(f"[yellow]Reply style set to {user_input[1:]} for subsequent replies.[/yellow]")
+            continue
         if user_input.startswith("/model"):
             arg = user_input[len("/model"):].strip()
             if not arg:
@@ -600,8 +619,8 @@ def main() -> None:
         history.append_turn(session_path, "user", content)
         try:
             if auto_search:
-                maybe_auto_search(client, model, messages, tavily_key, max_tokens)
-            reply = stream_reply(client, model, messages, max_tokens)
+                maybe_auto_search(client, model, messages, tavily_key, max_tokens, style)
+            reply = stream_reply(client, model, messages, max_tokens, style)
         except KeyboardInterrupt:
             console.print("\n[yellow]Generation cancelled.[/yellow]")
             del messages[turn_start:]

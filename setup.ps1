@@ -33,7 +33,10 @@ if ($existing -and $existing.Contains($Marker)) {
 
 $Marker
 function mistralbot {
-    python "$ChatPyPath" @args
+    python "$ChatPyPath" --style short @args
+}
+function mistralbotNorm {
+    python "$ChatPyPath" --style norm @args
 }
 "@
     Add-Content -Path $PROFILE -Value $block -Encoding utf8

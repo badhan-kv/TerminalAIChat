@@ -11,6 +11,8 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
   Note: as of Sep 2026 the Mistral free tier no longer includes `mistral-small`, `mistral-medium`, or
   `mistral-large` — calling them returns HTTP 429 with a 0 req/min limit (or 403). Use `ministral-8b-latest`,
   `ministral-3b-latest`, `ministral-14b-latest`, `open-mistral-nemo`, or `codestral-latest`.
+- `--style short|norm` — reply style at launch (default: `norm`). `short` adds a "Keep replies short and to the point." instruction to every request; `norm` adds nothing. The `mistralbot` PowerShell command launches with `--style short`; `mistralbotNorm` launches with `--style norm`.
+  Example: `python chat.py --style short`
 - `--help` / `-h` — prints this launch-flag usage and exits immediately, without prompting for API keys or starting a chat session.
 
 ## In-chat commands
@@ -18,6 +20,8 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 - `/clear` — resets in-memory conversation context; the next question gets no prior context. Does not delete or affect the on-disk session transcript already written — that log is untouched, future turns just keep appending to it after the gap.
 - `/logout` — delete the cached API keys (`%LOCALAPPDATA%\mistralBot\config.json`) and quit. Next run will prompt for keys again.
 - `/max-tokens <n>` — change the generation cap for subsequent replies without restarting (same effect as launching with `--max-tokens n`).
+- `/short` — switch to short replies for subsequent messages (adds "Keep replies short and to the point." to each request).
+- `/norm` — switch back to normal-length replies. Sends an explicit instruction ("Earlier brevity requests no longer apply. Reply at a normal, natural length again, sized to the question. Don't copy the length of earlier replies.") so the model doesn't keep imitating earlier short replies already in the conversation.
 - `/model` — opens an interactive picker of Mistral's free-tier chat models: Up/Down arrows + Enter to select, or press a number key (1-5) to jump straight to that model. Esc or Ctrl+C cancels without changing anything.
 - `/model <name>` — sets the model directly without opening the picker, for when you already know the exact model name.
   Note: free-tier response latency varies by model — the smaller/open-weight ones (e.g. `ministral-3b-latest`) can occasionally take 30-60s, noticeably slower than the flagship models. Requests time out and show an error after 60s rather than hanging indefinitely.
@@ -33,6 +37,12 @@ See `GETTING_API_KEYS.md` for how to get free Mistral and Tavily API keys. First
 - `/delete <keyword>` — shorthand for `/delete-history contains "<keyword>"`, no quotes needed (e.g. `/delete giraffe`).
 - Both `/delete-history` and `/delete` refuse to remove the session file you're currently chatting in (including one loaded via `/resume`) — it's skipped from the match set with a note, even if it matches your filter.
 - `/help` — prints a condensed version of this command reference to the terminal.
+
+## Reply style (short vs normal)
+- Style is a request to the model, not a hard limit: it is sent as an extra system message with each request. It is never saved in the conversation or in `history/` files, so a resumed session uses whatever style is active now. For a hard cap on length use `--max-tokens`.
+- Launching with `mistralbot` starts in short mode, `mistralbotNorm` in normal mode (no extra instruction, same as before this feature). `/short` and `/norm` switch at any time; the startup line shows the active mode.
+- After `/norm`, the explicit "lift" instruction is sent with every request until you type `/short` again. It is not sent when you launch with `mistralbotNorm` and never type `/norm`.
+- Earlier short replies stay in the conversation, so the model may take a turn or two to lengthen out; `/clear` resets that.
 
 ## Slash-command autocomplete
 Typing `/` at the prompt shows a live dropdown of every available command below the input line. Keep typing to narrow it (e.g. `/mo` narrows to `/model`). Tab or Enter on a highlighted suggestion completes it into the input line. Ctrl+C and Ctrl+D still cancel/exit as documented above — that didn't change.

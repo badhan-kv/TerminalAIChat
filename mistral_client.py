@@ -113,6 +113,37 @@ WEB_SEARCH_AVAILABLE_MESSAGE = {
 }
 
 
+SHORT_STYLE_MESSAGE = {
+    "role": "system",
+    "content": "Keep replies short and to the point.",
+}
+
+
+# Sent after an in-chat /norm. Without it the model tends to keep imitating the
+# short replies already in the history, so we explicitly lift the brevity request.
+NORM_SWITCH_MESSAGE = {
+    "role": "system",
+    "content": (
+        "Earlier brevity requests no longer apply. Reply at a normal, "
+        "natural length again, sized to the question. Don't copy the length "
+        "of earlier replies."
+    ),
+}
+
+
+def style_messages(style: str) -> list[dict]:
+    """System messages for the reply style.
+
+    'short' adds a brevity instruction; 'norm' adds none (launch default);
+    'norm-switch' (after /norm mid-chat) adds an explicit instruction to lift it.
+    """
+    if style == "short":
+        return [SHORT_STYLE_MESSAGE]
+    if style == "norm-switch":
+        return [NORM_SWITCH_MESSAGE]
+    return []
+
+
 def make_client(api_key: str, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> Mistral:
     bundle = search._ca_bundle()
     http_client = httpx.Client(verify=bundle) if bundle is not True else None
@@ -146,9 +177,10 @@ def send_message(
     messages: list[dict],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     on_retry=None,
+    style: str = "norm",
 ) -> str:
     """Send full message history, return the assistant's reply text."""
-    full_messages = [current_date_system_message()] + messages
+    full_messages = [current_date_system_message(), *style_messages(style)] + messages
     response = _with_retries(
         lambda: client.chat.complete(model=model, messages=full_messages, max_tokens=max_tokens),
         model=model,
@@ -164,6 +196,7 @@ def get_tool_calls(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     on_retry=None,
     force: bool = False,
+    style: str = "norm",
 ):
     """Ask the model (non-streaming) whether it wants to call the web_search tool
     before answering. Returns the response message; `.tool_calls` is falsy if
@@ -173,7 +206,7 @@ def get_tool_calls(
     regardless of its own judgement — used for queries the caller already knows
     are time-sensitive, and as a fallback when a weak model wrongly refuses.
     """
-    full_messages = [current_date_system_message(), WEB_SEARCH_AVAILABLE_MESSAGE] + messages
+    full_messages = [current_date_system_message(), WEB_SEARCH_AVAILABLE_MESSAGE, *style_messages(style)] + messages
     response = _with_retries(
         lambda: client.chat.complete(
             model=model,
@@ -194,13 +227,14 @@ def stream_message(
     messages: list[dict],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     on_retry=None,
+    style: str = "norm",
 ):
     """Send full message history, yield reply text incrementally as it's generated.
 
     The rate-limit retry only covers establishing the stream; a 429 mid-stream
     (rare) still propagates.
     """
-    full_messages = [current_date_system_message()] + messages
+    full_messages = [current_date_system_message(), *style_messages(style)] + messages
     event_stream = _with_retries(
         lambda: client.chat.stream(model=model, messages=full_messages, max_tokens=max_tokens),
         model=model,

@@ -250,3 +250,38 @@ def test_current_date_system_message_contains_todays_date():
 
     assert message["role"] == "system"
     assert datetime.now().strftime("%Y-%m-%d") in message["content"]
+
+
+def test_style_messages_short_adds_brevity_instruction():
+    assert mistral_client.style_messages("short") == [mistral_client.SHORT_STYLE_MESSAGE]
+
+
+def test_style_messages_norm_adds_nothing():
+    assert mistral_client.style_messages("norm") == []
+
+
+def test_style_messages_norm_switch_adds_lift_instruction():
+    assert mistral_client.style_messages("norm-switch") == [mistral_client.NORM_SWITCH_MESSAGE]
+
+
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_send_message_includes_style_message_after_date_message(_mock_date):
+    client = _fake_client("ok")
+    messages = [{"role": "user", "content": "Hi"}]
+
+    mistral_client.send_message(client, "m", messages, style="short")
+
+    sent = client.chat.complete.call_args.kwargs["messages"]
+    assert sent == [FAKE_SYSTEM_MESSAGE, mistral_client.SHORT_STYLE_MESSAGE] + messages
+    assert messages == [{"role": "user", "content": "Hi"}]  # history not mutated
+
+
+@patch("mistral_client.current_date_system_message", return_value=FAKE_SYSTEM_MESSAGE)
+def test_send_message_default_style_sends_no_style_message(_mock_date):
+    client = _fake_client("ok")
+    messages = [{"role": "user", "content": "Hi"}]
+
+    mistral_client.send_message(client, "m", messages)
+
+    sent = client.chat.complete.call_args.kwargs["messages"]
+    assert sent == [FAKE_SYSTEM_MESSAGE] + messages

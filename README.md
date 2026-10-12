@@ -50,7 +50,7 @@ cd TerminalAIChat
 ```
 `setup.ps1` does two things:
 - Installs Python dependencies (`pip install -r requirements.txt`).
-- Adds a `mistralbot` function to your PowerShell profile (`$PROFILE`), pointing at this clone, so you can launch the app from any directory afterwards. Safe to re-run — it won't add a duplicate.
+- Adds two functions to your PowerShell profile (`$PROFILE`), pointing at this clone, so you can launch the app from any directory afterwards: `mistralbot` (short replies) and `mistralbotNorm` (normal-length replies). Safe to re-run — it won't add a duplicate.
 
 If you'd rather not touch your PowerShell profile, skip `setup.ps1` and just run `pip install -r requirements.txt` — you can still launch with `python chat.py` from inside the project folder.
 
@@ -65,14 +65,15 @@ First run prompts for your Mistral and Tavily API keys (input hidden) and caches
 
 ## Everyday use
 ```powershell
-mistralbot                       # start a chat
+mistralbot                       # start a chat, short replies
+mistralbotNorm                   # start a chat, normal-length replies
 mistralbot --model ministral-3b-latest
 mistralbot --max-tokens 2048
 ```
-Type `/help` in-chat for the full command list, or see `HELP.md`.
+Switch reply length mid-chat with `/short` and `/norm`. Type `/help` in-chat for the full command list, or see `HELP.md`.
 
 ## Setting up on another machine
-Repeat steps 1–3 above on the new machine — each machine keeps its own cached API keys and its own `mistralbot` profile function pointing at wherever you cloned the repo there.
+Repeat steps 1–3 above on the new machine — each machine keeps its own cached API keys and its own `mistralbot` / `mistralbotNorm` profile functions pointing at wherever you cloned the repo there.
 
 ## Updating an existing install
 From inside the cloned folder:
@@ -81,6 +82,18 @@ git pull
 pip install -r requirements.txt
 ```
 This only touches files tracked in the repo. Anything machine-local and outside the repo — cached API keys (`%LOCALAPPDATA%\mistralBot\config.json`), session history (`history/`), and unrelated local machine settings (e.g. a root certificate under `Documents\`) — is untouched by `git pull`, so there's nothing to back up first. If you have uncommitted edits to a tracked file on that machine, run `git status` before pulling; `git pull` will refuse to overwrite them rather than silently discarding anything.
+
+### Existing installs: getting `mistralbotNorm` and short-by-default `mistralbot`
+`setup.ps1` skips a profile that already contains its marker comment, so re-running it will not update an older install. Edit `$PROFILE` (`notepad $PROFILE`) so the block reads (path to your clone):
+```powershell
+function mistralbot {
+    python "C:\path\to\TerminalAIChat\chat.py" --style short @args
+}
+function mistralbotNorm {
+    python "C:\path\to\TerminalAIChat\chat.py" --style norm @args
+}
+```
+Then open a new PowerShell window.
 
 ## License
 MIT — see `LICENSE`.
